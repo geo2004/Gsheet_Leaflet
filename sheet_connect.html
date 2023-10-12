@@ -35,7 +35,7 @@
             if (kw3) {
               axios.get(csvUrl)
                 .then(response => {
-                  PapaParse.parse(response.data, {
+                  Papa.parse(response.data, {
                     header: true,
                     dynamicTyping: true,
                     complete: function (parsedData) {
