@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Web Map with Leaflet</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    /* Add CSS styles if needed */
+    body { margin: 0; padding: 0; }
+    #map { height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.24.0/axios.min.js"></script>
+  <script>
+  const map = L.map('map').setView([-7.78906000099991,110.355119], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const geoJsonUrl = 'https://raw.githubusercontent.com/geo2004/Gsheet_Leaflet/main/NorthWest_Yogya.geojson';
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQYEkPQUAGvfis4GaCKcbv_0MXuLjbr2KDdRaPofgBnkZCEhHJhTlCnfMe6MHBIl-8e4gsp3Hl_kzQW/pub?output=csv';
+
+    let geoJsonLayer;
+
+    axios.get(geoJsonUrl)
+      .then(response => {
+        geoJsonLayer = L.geoJSON(response.data, {
+          onEachFeature: function (feature, layer) {
+            const kw3 = feature.properties.KW_3;
+            layer.bindPopup(`<b>KW_3:</b> ${kw3}`);
+            if (kw3) {
+              axios.get(csvUrl)
+                .then(response => {
+                  PapaParse.parse(response.data, {
+                    header: true,
+                    dynamicTyping: true,
+                    complete: function (parsedData) {
+                      const matchingCSVRow = parsedData.data.find(row => row.KW_3 === kw3);
+                      if (matchingCSVRow) {
+                        let popupContent = `<b>KW_3:</b> ${kw3}`;
+                        for (const [key, value] of Object.entries(matchingCSVRow)) {
+                          popupContent += `<br><b>${key}:</b> ${value}`;
+                        }
+                        layer.setPopupContent(popupContent);
+                      }
+                    }
+                  });
+                })
+                .catch(error => {
+                  console.error('Error loading CSV data:', error);
+                });
+            }
+          }
+        }).addTo(map);
+      })
+      .catch(error => {
+        console.error('Error loading GeoJSON data:', error);
+      });
+  </script>
+</body>
+</html>
