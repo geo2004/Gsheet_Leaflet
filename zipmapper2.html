@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaflet Map with Google Sheets Data</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map {
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+
+<script>
+  var map = L.map('map').setView([37.8, -96], 4);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+
+  var csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSGwzuguuz7Mu1ZoCO671OCs_XGTVaWDHvqm-EonXbNSpuALMNHkh4VFMxBwXLrT-vw8Ogo_hjiKvGB/pub?gid=0&single=true&output=csv';
+
+  // Load CSV data
+  fetch(csvUrl)
+    .then(response => response.text())
+    .then(csvData => {
+      // Parse the CSV data using PapaParse
+      Papa.parse(csvData, {
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
+        complete: function (results) {
+          createMapWithCSVData(results.data);
+        }
+      });
+    });
+
+  function createMapWithCSVData(data) {
+    data.forEach(function (row) {
+      var zipCode = row['Zip Code'];
+      var radius = parseFloat(row['Radius']);
+      var decision = row['Available?'];
+      var pfLeads = row['PF Leads'];
+      var fsboLeads = row['FSBO Leads'];
+      var expLeads = row['EXP Leads'];
+      var totalLeads = row['Total Leads'];
+
+      // Check if the ZIP code is within the U.S. (5-digit ZIP code)
+      if (/^\d{5}$/.test(zipCode)) {
+        // Check if the result is cached in localStorage
+        var cachedResult = localStorage.getItem(zipCode);
+
+        if (cachedResult) {
+          // Process the cached result
+          processGeocodingResult(zipCode, JSON.parse(cachedResult), radius, decision, pfLeads, fsboLeads, expLeads, totalLeads);
+        } else {
+          // Geocode the zip code with bounding box for the U.S.
+          var boundingBox = '-125.000000,24.396308;-66.934570,49.384358';
+          fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${zipCode}&bounded=1&viewbox=${boundingBox}`)
+            .then(response => response.json())
+            .then(data => {
+              // Cache the geocoding result
+              localStorage.setItem(zipCode, JSON.stringify(data));
+
+              // Process the geocoding result
+              processGeocodingResult(zipCode, data, radius, decision, pfLeads, fsboLeads, expLeads, totalLeads);
+            })
+            .catch(error => {
+              console.error('Error:', error);
+            });
+        }
+      }
+    });
+  }
+
+  function processGeocodingResult(zipCode, data, radius, decision, pfLeads, fsboLeads, expLeads, totalLeads) {
+    if (data.length > 0) {
+      var latlng = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+
+      // Determine the circle color based on the "Decision" column
+      var circleColor = decision === 'Yes' ? 'green' : 'red';
+
+      // Create a buffered circle around the point
+      var circle = L.circle(latlng, {
+        radius: radius * 1609.34, // Convert miles to meters
+        color: circleColor,
+        fillOpacity: 0.2
+      }).addTo(map);
+
+      // Create a popup with information from all columns in the CSV
+      var popupContent = '<b>Zip Code:</b> ' + zipCode + '<br>';
+      popupContent += '<b>Radius:</b> ' + radius + ' miles<br>';
+      popupContent += '<b>Decision:</b> ' + decision + '<br>';
+      popupContent += '<b>PF Leads:</b> ' + pfLeads + '<br>';
+      popupContent += '<b>FSBO Leads:</b> ' + fsboLeads + '<br>';
+      popupContent += '<b>EXP Leads:</b> ' + expLeads + '<br>';
+      popupContent += '<b>Total Leads:</b> ' + totalLeads + '<br>';
+
+      circle.bindPopup(popupContent);
+    }
+  }
+
+</script>
+
+</body>
+</html>
